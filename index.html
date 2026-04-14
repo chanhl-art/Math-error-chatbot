@@ -199,8 +199,8 @@
             setIsLoading(true);
 
             try {
-              // ⚠️ 修正為正確且公開的 gemini-1.5-flash 模型名稱 ⚠️
-              const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+              // ⚠️ 已修正為 gemini-1.5-flash-latest，解決模型找不到的問題 ⚠️
+              const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
               const contents = newHistory.map(msg => ({
                 role: msg.role === 'model' ? 'model' : 'user',
                 parts: [{ text: msg.content }]
