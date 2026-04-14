@@ -11,12 +11,6 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- 載入 Babel (用於在瀏覽器編譯 JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <style>
-        /* 避免 iOS Safari 彈出鍵盤時畫面縮放 */
-        input[type="text"], input[type="number"], textarea {
-            font-size: 16px;
-        }
-    </style>
 </head>
 <body class="bg-slate-200 m-0 p-0">
     <div id="root"></div>
@@ -24,7 +18,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- SVG 圖示元件 ---
+        // --- SVG 圖示元件 (取代 lucide-react) ---
         const Send = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>;
         const Mic = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x1="12" y1="19" y2="22"></line></svg>;
         const MicOff = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="2" y1="2" x2="22" y2="22"></line><path d="M18.89 13.23A7.12 7.12 0 0 0 19 10v-2"></path><path d="M5 10v2a7 7 0 0 0 12 5"></path><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path><path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>;
@@ -34,59 +28,50 @@
         const ChevronRight = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
         const Save = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>;
 
-        // --- 應用程式邏輯 ---
-        // 你的專屬 API Key
-        const apiKey = "AIzaSyAn-78UCwG_wTeVhzeCF8RtInEw0fchfLU"; 
-
-        // 老師設定的 Google Apps Script Web App URL
+        // --- 設定參數 ---
+        const apiKey = ""; 
         const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbwvswfA7mWQbwQljx6vvlpwu46hg7smw4vogo1Vr3aEqpoDDVugLTBdFiBWb_Dac3XA_w/exec"; 
 
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        async function fetchWithRetry(url, options, maxRetries = 3) {
+        async function fetchWithRetry(url, options, maxRetries = 5) {
           let retries = 0;
           while (retries < maxRetries) {
             try {
               const response = await fetch(url, options);
-              const data = await response.json();
-              if (!response.ok) {
-                 // 捕捉 API 回傳的具體錯誤訊息
-                 throw new Error(data.error?.message || `HTTP error! status: ${response.status}`);
-              }
-              return data;
+              if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+              return await response.json();
             } catch (error) {
               retries++;
               if (retries >= maxRetries) throw error;
-              await delay(1000);
+              await delay(Math.pow(2, retries) * 1000);
             }
           }
         }
 
-        // AI 系統提示詞
         const SYSTEM_PROMPT = `
-        你現在扮演一位極度有錢但脾氣古怪、對數字非常執著的首富金先生。
-        情境：你花一百萬訂製純金招財貓，要求高度絕對剛好 12 cm。工匠用最小刻度 1 cm 的尺量出 12 cm，但說一定有誤差。你拒付尾款！
-        玩家（學生）是你高薪聘請的數學顧問，要說服你。
+你現在扮演一位極度有錢但脾氣古怪、對數字非常執著的首富金先生。
+情境：你花一百萬訂製純金招財貓，要求高度絕對剛好 12 cm。工匠用最小刻度 1 cm 的尺量出 12 cm，但說一定有誤差。你拒付尾款！
+玩家（學生）是你高薪聘請的數學顧問，要說服你。
 
-        【說服進度設定】你必須嚴格依照以下階段回應，絕對不能提早讓步，這是一場漸進式的辯論：
+【說服進度設定】你必須嚴格依照以下階段回應，絕對不能提早讓步，這是一場漸進式的辯論：
 
-        【階段一：質疑原理】
-        當玩家只提到一定有誤差、世界上沒有絕對等空泛理由時，你不能接受。
-        你要反駁：廢話！我是首富，買不到絕對精準？你要告訴我，這把最小刻度 1 cm 的尺，它的「最大絕對誤差」到底是多少？背後的數學公式是什麼？我才信你！
+【階段一：質疑原理】
+當玩家只提到一定有誤差、世界上沒有絕對或單純丟出 0.5 這個數字時，你不能接受。
+你要反駁：廢話！我是首富，買不到絕對精準？還有，憑什麼誤差是 0.5 cm？你要用數學原理解釋清楚最小刻度跟四捨五入的關係，我才信你！
 
-        【階段二：要求公式與加碼測驗】
-        當玩家成功說出公式包含「一半」或「1/2 乘以最小刻度」，並算出這把 1cm 尺的誤差是 0.5 cm 時，你要稍微軟化，但立刻提出額外考題刁難：
-        你的台詞：好，算你說得有點道理，公式我勉強接受。但我再考考你：如果那個蠢工匠當初偷懶，用的是一把最小刻度是 2 cm 的粗糙間尺，那「最大絕對誤差」會變成多少？答對這題，我才徹底信你！
+【階段二：要求範圍與加碼測驗】
+當玩家成功解釋了最大誤差是刻度間距的一半 (0.5cm) 並說出金貓高度範圍在 11.5 到 12.5 之間時，你要稍微軟化，但立刻提出額外考題刁難：
+你的台詞：好，算你說得有點道理，11.5到12.5我勉強接受。但我再考考你：如果那個蠢工匠當初用的是一把最小刻度是 2 cm 的粗糙間尺，量出來同樣記錄為 12 cm，那最大誤差會變成多少？金貓的真實高度範圍又會變成多少？答對這題，我才徹底信你！
 
-        【階段三：最終說服】
-        當玩家正確答出最大絕對誤差是 1 cm 時，你才恍然大悟並徹底投降。
-        被說服的台詞：什麼！？原來如此！刻度 1cm 的尺最大誤差是 0.5cm，刻度 2cm 的尺最大誤差就是 1cm。尺越粗糙誤差越大！你的數學解釋無懈可擊，我徹底服了，馬上付錢給工匠！【任務成功】 (必須包含【任務成功】四個字)
+【階段三：最終說服】
+當玩家正確答出最大誤差是 1 cm 且範圍在 11 到 13 之間時，你才恍然大悟並徹底投降。
+被說服的台詞：什麼！？原來如此！刻度 1cm 的尺範圍是 11.5~12.5，刻度 2cm 的尺範圍就是 11~13。尺越粗糙誤差越大！你的數學推導無懈可擊，我徹底服了，馬上付錢給工匠！【任務成功】 (必須包含【任務成功】四個字)
 
-        【基本規則】：
-        1. 每次回覆控制在 50~80 字以內，語氣傲慢但講理。
-        2. ⚠️ 絕對不要主動提及「上限」、「下限」或「範圍 (例如 11.5~12.5)」，除非玩家主動提起。重點只放在最大絕對誤差的數值。
-        3. 如果玩家答錯加碼考題，你要大肆嘲笑：你這數學顧問是體育老師教的嗎？算錯了！公式是 1/2 乘以最小刻度，再想清楚！
-        `;
+【基本規則】：
+1. 每次回覆控制在 50~80 字以內，語氣傲慢但講理。
+2. 如果玩家答錯加碼考題（比如算錯 2cm 尺的範圍），你要大肆嘲笑：你這數學顧問是體育老師教的嗎？算錯了！刻度是2cm，一半是多少？再想清楚！
+`;
 
         function App() {
           const [messages, setMessages] = useState([
@@ -127,9 +112,12 @@
               };
 
               recognition.onerror = (event) => {
-                console.error('語音辨識錯誤', event.error);
+                console.error('Speech recognition error', event.error);
                 setIsRecording(false);
-                if(event.error === 'not-allowed') setHasSpeechSupport(false);
+                // 如果在 iframe 中遇到麥克風被阻擋，關閉語音支援
+                if(event.error === 'not-allowed') {
+                  setHasSpeechSupport(false);
+                }
               };
               recognition.onend = () => setIsRecording(false);
               recognitionRef.current = recognition;
@@ -144,7 +132,7 @@
 
           const toggleRecording = () => {
             if (!hasSpeechSupport || !recognitionRef.current) {
-              alert('你的設備目前不支援語音輸入，或權限被阻擋。請使用鍵盤打字。');
+              alert('因瀏覽器或網頁限制，目前無法使用麥克風。請直接使用鍵盤打字。');
               return;
             }
             if (isRecording) recognitionRef.current.stop();
@@ -183,7 +171,7 @@
               alert("對話紀錄已成功提交給老師！");
             } catch (error) {
               console.error("Save Error:", error);
-              alert("儲存紀錄時發生錯誤，請截圖保留你的對話以便老師檢查。");
+              alert("儲存紀錄時發生錯誤，請截圖保留你的對話。");
             } finally {
               setIsSaving(false);
             }
@@ -199,8 +187,7 @@
             setIsLoading(true);
 
             try {
-              // ⚠️ 已修正為 gemini-1.5-flash-latest，解決模型找不到的問題 ⚠️
-              const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+              const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
               const contents = newHistory.map(msg => ({
                 role: msg.role === 'model' ? 'model' : 'user',
                 parts: [{ text: msg.content }]
@@ -217,12 +204,7 @@
                 body: JSON.stringify(payload)
               });
 
-              const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-              
-              if (!aiResponseText) {
-                throw new Error("API 未回傳文字內容");
-              }
-
+              const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，網絡連線不穩。';
               const updatedHistory = [...newHistory, { role: 'model', content: aiResponseText }];
               setMessages(updatedHistory);
 
@@ -230,9 +212,7 @@
                 setIsSuccess(true);
               }
             } catch (error) {
-              console.error("API 請求錯誤：", error);
-              // 如果連線失敗，會在畫面上顯示出錯誤原因，方便知道是被甚麼擋住
-              setMessages([...newHistory, { role: 'model', content: `【系統提示】連線發生錯誤：${error.message}。請確認網路狀態再試一次。` }]);
+              setMessages([...newHistory, { role: 'model', content: '網絡連線發生錯誤，請再試一次。' }]);
             } finally {
               setIsLoading(false);
             }
@@ -250,14 +230,11 @@
                   <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in fade-in duration-200">
                     <h2 className="text-2xl font-bold text-amber-600 mb-4 flex items-center">
                       <AlertCircle className="w-6 h-6 mr-2" />
-                      任務背景
+                      任務背景 (進階挑戰)
                     </h2>
                     <div className="space-y-3 text-slate-700 text-sm md:text-base leading-relaxed mb-4">
                       <p>
                         <strong>首富金先生</strong>要求純金招財貓高度<span className="text-red-500 font-bold">絕對剛好 12 cm，毫無誤差</span>。工匠用最小刻度 1 cm 的尺量出 12 cm，金先生因為不懂誤差原理而拒付尾款！
-                      </p>
-                      <p className="bg-slate-100 p-2 rounded text-slate-600 border border-slate-200 text-sm">
-                        🎯 <strong>你的任務：</strong>運用今天學到的<strong className="text-blue-600">「最大絕對誤差」</strong>公式，向金先生解釋為什麼 1cm 刻度的尺會有 0.5cm 的誤差，並回答他的加碼難題。
                       </p>
                     </div>
                     
@@ -270,6 +247,7 @@
                         placeholder="例如：陳大文 (2B)"
                         className="w-full px-3 py-3 md:py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-base"
                       />
+                      <p className="text-xs text-amber-700 mt-2">老師將會透過此姓名檢視你的過關紀錄。</p>
                     </div>
 
                     <button 
@@ -286,7 +264,7 @@
               <header className="bg-amber-500 text-white p-4 shadow-md flex justify-between items-center z-10 relative shrink-0">
                 <div>
                   <h1 className="text-xl md:text-2xl font-bold">誤差偵探：黃金貓之謎</h1>
-                  <p className="text-xs md:text-sm text-amber-100">{studentName ? `顧問：${studentName}` : '難度：⭐⭐'}</p>
+                  <p className="text-xs md:text-sm text-amber-100">{studentName ? `顧問：${studentName}` : '難度：⭐⭐⭐'}</p>
                 </div>
                 <div className="flex items-center space-x-2 md:space-x-4">
                   <button 
@@ -337,7 +315,7 @@
               {isSuccess && (
                 <div className="p-4 m-4 bg-green-100 border border-green-300 rounded-xl text-green-800 text-center shadow-sm animate-pulse font-bold flex flex-col items-center shrink-0">
                   <span className="text-3xl mb-2">🎉</span>
-                  <span className="text-lg">太厲害了！你成功運用公式說服了金先生！</span>
+                  <span className="text-lg">太厲害了！你完成了全部的數學推導！</span>
                   <button 
                     onClick={handleSaveToSheet}
                     disabled={isSaving}
@@ -355,9 +333,8 @@
                     <InfoIcon className="w-5 h-5 md:w-6 md:h-6 mr-1" /> 顧問提示
                   </div>
                   <ul className="space-y-2">
-                    <li className="flex items-start"><ChevronRight className="w-5 h-5 mt-0.5 text-yellow-600 mr-1 flex-shrink-0"/>試著把今天背誦的公式告訴他：「<strong>最大絕對誤差 = 1/2 × 最小刻度</strong>」。</li>
-                    <li className="flex items-start"><ChevronRight className="w-5 h-5 mt-0.5 text-yellow-600 mr-1 flex-shrink-0"/>幫他算出 1cm 刻度的尺，最大誤差是 0.5cm。</li>
-                    <li className="flex items-start"><ChevronRight className="w-5 h-5 mt-0.5 text-yellow-600 mr-1 flex-shrink-0"/>當他拋出 2cm 尺的難題時，冷靜用同一個公式計算答案給他！</li>
+                    <li className="flex items-start"><ChevronRight className="w-5 h-5 mt-0.5 text-yellow-600 mr-1 flex-shrink-0"/>試著向他解釋：因為<strong>四捨五入</strong>的關係，最大誤差會是刻度間距的一半 (0.5cm)。</li>
+                    <li className="flex items-start"><ChevronRight className="w-5 h-5 mt-0.5 text-yellow-600 mr-1 flex-shrink-0"/>算出金貓真實的可能範圍，並隨時準備迎接他的加碼考驗！</li>
                   </ul>
                 </div>
               )}
